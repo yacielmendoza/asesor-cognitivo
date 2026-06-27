@@ -20,10 +20,19 @@ HISTORY_WINDOW = 8
 class Session:
     def __init__(self, websocket: WebSocket, provider: LLMProvider | None = None) -> None:
         self.ws = websocket
-        self.provider = provider or get_provider()
         self.history: list[str] = []
         self.scenario: str | None = None
         self.audio_bytes_received = 0
+        if provider is not None:
+            self.provider = provider
+        else:
+            try:
+                self.provider = get_provider()
+            except Exception:
+                # Configuración de LLM ausente o inválida: la sesión sigue viva
+                # (transcripción y escenario funcionan) pero sin generar alertas.
+                logger.exception("No se pudo inicializar el LLMProvider; sesión sin alertas")
+                self.provider = None
 
     async def handle_audio_chunk(self, data: bytes) -> None:
         """Audio PCM16 crudo. Stateless por diseño: solo se cuenta, no se guarda ni
@@ -51,6 +60,9 @@ class Session:
         if new_scenario != self.scenario:
             self.scenario = new_scenario
             await self._send(ScenarioEvent(etiqueta=new_scenario))
+
+        if self.provider is None:
+            return
 
         card = await self.provider.analyze(
             history=self.history[-HISTORY_WINDOW:-1],

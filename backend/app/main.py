@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.session import Session
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("asesor.main")
 
 app = FastAPI(title="Asesor Cognitivo Personal — Backend")
 
@@ -36,9 +37,14 @@ async def ws_session(websocket: WebSocket) -> None:
                 break
             data_bytes = message.get("bytes")
             data_text = message.get("text")
-            if data_bytes is not None:
-                await session.handle_audio_chunk(data_bytes)
-            elif data_text is not None:
-                await session.handle_text_message(data_text)
+            try:
+                if data_bytes is not None:
+                    await session.handle_audio_chunk(data_bytes)
+                elif data_text is not None:
+                    await session.handle_text_message(data_text)
+            except Exception:
+                # Nunca tirar la sesión completa por un mensaje problemático:
+                # se registra y se sigue escuchando.
+                logger.exception("Error procesando mensaje de la sesión")
     except WebSocketDisconnect:
         pass
