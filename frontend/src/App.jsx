@@ -3,7 +3,6 @@ import Sentinel from "./components/Sentinel.jsx";
 import Ribbon from "./components/Ribbon.jsx";
 import Legend from "./components/Legend.jsx";
 import AlertStream from "./components/AlertStream.jsx";
-import { startAudioCapture } from "./lib/audioCapture.js";
 import { createSpeechRecognizer, isSpeechRecognitionSupported } from "./lib/speechRecognition.js";
 import { connectSession } from "./lib/socket.js";
 
@@ -19,7 +18,6 @@ export default function App() {
   const [error, setError] = useState("");
 
   const sessionRef = useRef(null);
-  const captureRef = useRef(null);
   const recognizerRef = useRef(null);
   const speakerRef = useRef(speakerOverride);
   speakerRef.current = speakerOverride;
@@ -59,10 +57,8 @@ export default function App() {
   }, []);
 
   const stop = useCallback(() => {
-    captureRef.current?.stop();
     recognizerRef.current?.stop();
     sessionRef.current?.close();
-    captureRef.current = null;
     recognizerRef.current = null;
     sessionRef.current = null;
     setLive(false);
@@ -80,8 +76,6 @@ export default function App() {
         onClose: () => setLive(false),
       });
       sessionRef.current = session;
-
-      captureRef.current = await startAudioCapture((chunk) => session.sendAudioChunk(chunk));
 
       recognizerRef.current = createSpeechRecognizer({
         onResult: ({ texto, esFinal }) => {
