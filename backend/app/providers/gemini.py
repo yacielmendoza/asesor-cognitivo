@@ -10,7 +10,7 @@ GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{mode
 class GeminiProvider(LLMProvider):
     def __init__(self) -> None:
         self.api_key = os.environ["GEMINI_API_KEY"]
-        self.model = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+        self.model = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 
     async def _complete(self, prompt: str) -> str:
         url = GEMINI_ENDPOINT.format(model=self.model)
