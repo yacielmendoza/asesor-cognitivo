@@ -84,7 +84,18 @@ export default function App() {
       captureRef.current = await startAudioCapture((chunk) => session.sendAudioChunk(chunk));
 
       recognizerRef.current = createSpeechRecognizer({
-        onResult: ({ texto, esFinal }) => session.sendTranscript({ speaker: speakerRef.current, texto, esFinal }),
+        onResult: ({ texto, esFinal }) => {
+          setRibbon({ who: speakerRef.current === "yo" ? "Tú" : "Agente", said: texto });
+          session.sendTranscript({ speaker: speakerRef.current, texto, esFinal });
+        },
+        onError: (code) => {
+          const messages = {
+            "not-allowed": "Permiso de micrófono denegado.",
+            "audio-capture": "No se detecta micrófono.",
+            network: "Error de red en el reconocimiento de voz.",
+          };
+          setError(messages[code] || `Error de reconocimiento de voz: ${code}`);
+        },
       });
       recognizerRef.current.start();
 

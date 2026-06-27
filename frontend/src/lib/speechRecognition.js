@@ -5,7 +5,7 @@ export function isSpeechRecognitionSupported() {
   return Boolean(window.SpeechRecognition || window.webkitSpeechRecognition);
 }
 
-export function createSpeechRecognizer({ lang = "es-ES", onResult } = {}) {
+export function createSpeechRecognizer({ lang = "es-ES", onResult, onError } = {}) {
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SpeechRecognition) return null;
 
@@ -19,6 +19,12 @@ export function createSpeechRecognizer({ lang = "es-ES", onResult } = {}) {
     const texto = result[0].transcript.trim();
     if (!texto) return;
     onResult({ texto, esFinal: result.isFinal });
+  };
+
+  recognizer.onerror = (event) => {
+    // "no-speech" ocurre constantemente en silencio normal; no es un error real.
+    if (event.error === "no-speech") return;
+    onError?.(event.error);
   };
 
   recognizer.onend = () => {
