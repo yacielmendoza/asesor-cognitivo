@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Asesor Cognitivo · HUD en vivo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  /* ============================================================
+     ASESOR COGNITIVO — HUD táctico
+     Sistema de diseño
+     ------------------------------------------------------------
+     Canvas: slate profundo con profundidad azul-violeta (no #000 plano)
+     Vidrio: blanco a baja opacidad + backdrop-blur (liquid glass)
+     Acentos SEMÁNTICOS (intrínsecos al producto, no decorativos):
+       coral  = riesgo / estafa        (prioridad alta)
+       zafiro = sugerencia táctica
+       ámbar  = pregunta sugerida
+       menta  = dato / cálculo en vivo
+     Tipografía:
+       display → Space Grotesk (técnica, con carácter, usada con mesura)
+       cuerpo  → Inter (legibilidad bajo presión: gana el brief)
+       datos   → Space Mono (la matemática de la negociación, "en cómputo")
+     ============================================================ */
+
+  :root {
+    --canvas-0: #070A14;
+    --canvas-1: #0B0F1E;
+    --canvas-2: #111733;
+
+    --ink:      #F3F6FF;
+    --ink-2:    #AEB7D6;
+    --ink-3:    #6E78A0;
+
+    --coral:    #FF5D6C;
+    --coral-dim:#FF8A95;
+    --zafiro:   #4D9FFF;
+    --zafiro-dim:#86C0FF;
+    --ambar:    #FFC24D;
+    --ambar-dim:#FFD98A;
+    --menta:    #3FE0AD;
+    --menta-dim:#88EFCC;
+
+    --glass-bg:  rgba(255,255,255,0.045);
+    --glass-bd:  rgba(255,255,255,0.10);
+    --glass-hi:  rgba(255,255,255,0.16);
+
+    --r-lg: 22px;
+    --r-md: 16px;
+    --r-sm: 10px;
+
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body { height: 100%; }
+
+  body {
+    font-family: "Inter", system-ui, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(120% 80% at 50% -10%, #16204a 0%, rgba(22,32,74,0) 55%),
+      radial-gradient(90% 60% at 90% 110%, #1a1340 0%, rgba(26,19,64,0) 50%),
+      linear-gradient(180deg, var(--canvas-1) 0%, var(--canvas-0) 100%);
+    min-height: 100dvh;
+    display: flex;
+    padding: clamp(12px, 3vw, 40px);
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  /* margin:auto centra y, a la vez, permite hacer scroll cuando el
+     dispositivo es más alto que la pantalla (grid place-items lo recortaba). */
+  .device { margin: auto; }
+
+  /* ---- Marco del dispositivo (HUD sobre la llamada) ---- */
+  .device {
+    position: relative;
+    width: min(420px, 100%);
+    height: min(860px, 92dvh);
+    border-radius: 40px;
+    padding: 18px;
+    background:
+      linear-gradient(160deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01));
+    border: 1px solid var(--glass-bd);
+    box-shadow:
+      0 50px 120px -30px rgba(0,0,0,0.8),
+      inset 0 1px 0 var(--glass-hi);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* halo ambiental que reacciona a alertas críticas */
+  .device::before {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border-radius: 42px;
+    padding: 2px;
+    background: linear-gradient(180deg, rgba(255,93,108,0), rgba(255,93,108,0));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    opacity: 0;
+    transition: opacity .5s var(--ease);
+    pointer-events: none;
+    z-index: 5;
+  }
+  .device.alert-flash::before {
+    background: linear-gradient(180deg, var(--coral), rgba(255,93,108,0) 60%);
+    opacity: 1;
+    animation: flashfade 1.4s var(--ease);
+  }
+  @keyframes flashfade { 0%{opacity:1} 100%{opacity:0} }
+
+  /* ---- Barra centinela (estado del asistente) ---- */
+  .sentinel {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 6px 16px;
+  }
+  .pulse {
+    --d: 38px;
+    position: relative;
+    width: var(--d); height: var(--d);
+    flex: 0 0 var(--d);
+    display: grid; place-items: center;
+  }
+  .pulse .ring {
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    border: 1.5px solid var(--menta);
+    opacity: .8;
+  }
+  .pulse .ring.r2 { animation: breathe 3.4s var(--ease) infinite; }
+  .pulse .ring.r3 { animation: breathe 3.4s var(--ease) infinite .9s; }
+  .pulse .core {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--menta);
+    box-shadow: 0 0 14px var(--menta);
+  }
+  @keyframes breathe {
+    0%   { transform: scale(.55); opacity: .9; }
+    70%  { transform: scale(1.45); opacity: 0; }
+    100% { transform: scale(1.45); opacity: 0; }
+  }
+
+  .sentinel-text { display: flex; flex-direction: column; gap: 2px; line-height: 1.1; }
+  .sentinel-text .lbl {
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 600;
+    font-size: 14.5px;
+    letter-spacing: .2px;
+  }
+  .sentinel-text .scn {
+    font-size: 11.5px;
+    color: var(--ink-3);
+    letter-spacing: .3px;
+    text-transform: uppercase;
+  }
+  .live-chip {
+    margin-left: auto;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: "Space Mono", monospace;
+    font-size: 10.5px; letter-spacing: 1px;
+    color: var(--menta-dim);
+    padding: 5px 10px;
+    border-radius: 999px;
+    background: rgba(63,224,173,0.08);
+    border: 1px solid rgba(63,224,173,0.22);
+  }
+  .live-chip .dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--menta);
+    box-shadow: 0 0 8px var(--menta);
+    animation: blink 1.6s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: .25; } }
+
+  /* ---- Cinta de transcripción (lo que dice la otra parte) ---- */
+  .ribbon {
+    margin: 0 2px 14px;
+    padding: 11px 14px;
+    border-radius: var(--r-md);
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.06);
+    min-height: 56px;
+    display: flex; flex-direction: column; gap: 4px;
+    justify-content: center;
+  }
+  .ribbon .who {
+    font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase;
+    color: var(--ink-3); font-weight: 600;
+  }
+  .ribbon .said {
+    font-size: 13.5px; color: var(--ink-2); line-height: 1.4;
+    transition: opacity .35s var(--ease);
+  }
+  .ribbon .said b { color: var(--ink); font-weight: 600; }
+
+  /* ---- Stream de alertas ---- */
+  .stream {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    position: relative;
+    -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 8px), transparent 100%);
+            mask-image: linear-gradient(180deg, transparent 0, #000 22px, #000 calc(100% - 8px), transparent 100%);
+  }
+  .stream::-webkit-scrollbar { width: 5px; }
+  .stream::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.14); border-radius: 999px; }
+  .stream-inner {
+    display: flex; flex-direction: column-reverse;
+    gap: 12px;
+    padding: 8px 2px 4px;
+    min-height: 100%;
+    justify-content: flex-start;
+  }
+
+  /* ---- Tarjeta de alerta ---- */
+  .card {
+    --accent: var(--zafiro);
+    --accent-dim: var(--zafiro-dim);
+    position: relative;
+    border-radius: var(--r-lg);
+    padding: 15px 16px 16px;
+    background:
+      linear-gradient(180deg, var(--glass-bg), rgba(255,255,255,0.015));
+    border: 1px solid var(--glass-bd);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    box-shadow:
+      0 18px 40px -22px rgba(0,0,0,0.9),
+      inset 0 1px 0 var(--glass-hi);
+    overflow: hidden;
+    animation: rise .62s var(--ease) both;
+    will-change: transform, opacity, filter;
+  }
+  @keyframes rise {
+    0%   { opacity: 0; transform: translateY(26px) scale(.97); filter: blur(8px); }
+    60%  { opacity: 1; }
+    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
+  }
+  .card.leaving { animation: sink .5s var(--ease) forwards; }
+  @keyframes sink {
+    to { opacity: 0; transform: translateY(-10px) scale(.98); filter: blur(4px); height:0; margin:0; padding-top:0; padding-bottom:0; }
+  }
+
+  /* franja de acento a la izquierda */
+  .card::before {
+    content: "";
+    position: absolute; left: 0; top: 14px; bottom: 14px;
+    width: 3px; border-radius: 3px;
+    background: linear-gradient(180deg, var(--accent), var(--accent-dim));
+    box-shadow: 0 0 16px -2px var(--accent);
+  }
+  /* glow superior sutil del color de acento */
+  .card::after {
+    content: "";
+    position: absolute; inset: 0;
+    background: radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 60%);
+    pointer-events: none;
+  }
+
+  .card .head {
+    display: flex; align-items: center; gap: 9px;
+    margin-bottom: 9px;
+  }
+  .badge {
+    width: 30px; height: 30px; border-radius: 9px;
+    display: grid; place-items: center;
+    background: color-mix(in srgb, var(--accent) 16%, transparent);
+    border: 1px solid color-mix(in srgb, var(--accent) 36%, transparent);
+    color: var(--accent-dim);
+    font-size: 15px;
+    flex: 0 0 30px;
+  }
+  .tag {
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 11px; font-weight: 600; letter-spacing: .6px;
+    text-transform: uppercase;
+    color: var(--accent-dim);
+  }
+  .prio {
+    margin-left: auto;
+    font-family: "Space Mono", monospace;
+    font-size: 9.5px; letter-spacing: 1px;
+    color: var(--ink-3);
+    padding: 3px 8px; border-radius: 999px;
+    border: 1px solid rgba(255,255,255,0.09);
+  }
+  .prio.alta { color: var(--coral-dim); border-color: rgba(255,93,108,0.3); }
+
+  .card .body {
+    font-size: 15px; line-height: 1.45; color: var(--ink);
+    font-weight: 500;
+    letter-spacing: -.1px;
+  }
+
+  /* cita: la frase que disparó la alerta (elemento firma) */
+  .quote {
+    margin-top: 11px;
+    padding: 9px 11px 9px 12px;
+    border-radius: var(--r-sm);
+    background: rgba(255,255,255,0.03);
+    border-left: 2px solid color-mix(in srgb, var(--accent) 50%, transparent);
+    font-size: 12.5px; color: var(--ink-2); font-style: italic;
+    line-height: 1.4;
+  }
+  .quote span { color: var(--ink-3); font-style: normal; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; display:block; margin-bottom:3px; }
+
+  /* tarjeta de cálculo: la matemática de la negociación */
+  .calc {
+    margin-top: 11px;
+    font-family: "Space Mono", monospace;
+    font-size: 12.5px;
+    background: rgba(63,224,173,0.05);
+    border: 1px solid rgba(63,224,173,0.16);
+    border-radius: var(--r-sm);
+    padding: 11px 12px;
+    line-height: 1.7;
+  }
+  .calc .row { display:flex; justify-content: space-between; gap: 10px; color: var(--ink-2); }
+  .calc .row b { color: var(--ink); }
+  .calc .win { margin-top: 7px; padding-top: 8px; border-top: 1px dashed rgba(63,224,173,0.25); color: var(--menta-dim); font-weight: 700; display:flex; justify-content: space-between; }
+
+  /* acentos por tipo */
+  .card.t-alerta     { --accent: var(--coral);  --accent-dim: var(--coral-dim); }
+  .card.t-sugerencia { --accent: var(--zafiro); --accent-dim: var(--zafiro-dim); }
+  .card.t-pregunta   { --accent: var(--ambar);  --accent-dim: var(--ambar-dim); }
+  .card.t-calculo    { --accent: var(--menta);  --accent-dim: var(--menta-dim); }
+
+  /* ---- Pie / control ---- */
+  .foot {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 4px 2px;
+  }
+  .hint { font-size: 11px; color: var(--ink-3); line-height:1.3; }
+  .replay {
+    margin-left: auto;
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 600; font-size: 13px;
+    color: var(--ink);
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-bd);
+    border-radius: 999px;
+    padding: 9px 18px;
+    cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px;
+    transition: border-color .25s var(--ease), background .25s var(--ease), transform .1s var(--ease);
+  }
+  .replay:hover { border-color: var(--glass-hi); background: rgba(255,255,255,0.07); }
+  .replay:active { transform: scale(.97); }
+  .replay:focus-visible { outline: 2px solid var(--zafiro); outline-offset: 2px; }
+
+  /* leyenda de colores (educa sin estorbar) */
+  .legend {
+    display: flex; gap: 14px; flex-wrap: wrap;
+    padding: 0 4px 0;
+    margin-bottom: 2px;
+  }
+  .legend i {
+    font-style: normal; font-size: 10px; color: var(--ink-3);
+    display: inline-flex; align-items: center; gap: 6px; letter-spacing: .3px;
+  }
+  .legend i::before {
+    content:""; width: 7px; height: 7px; border-radius: 50%;
+  }
+  .legend .l-coral::before  { background: var(--coral);  box-shadow: 0 0 8px var(--coral); }
+  .legend .l-zaf::before    { background: var(--zafiro); box-shadow: 0 0 8px var(--zafiro); }
+  .legend .l-amb::before    { background: var(--ambar);  box-shadow: 0 0 8px var(--ambar); }
+  .legend .l-men::before    { background: var(--menta);  box-shadow: 0 0 8px var(--menta); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .001s !important; animation-iteration-count: 1 !important; transition-duration: .001s !important; }
+    .card { animation: none; }
+  }
+</style>
+</head>
+<body>
+  <main class="device" id="device" aria-label="Asesor Cognitivo en vivo">
+    <!-- Centinela -->
+    <header class="sentinel">
+      <div class="pulse" aria-hidden="true">
+        <span class="ring r2"></span>
+        <span class="ring r3"></span>
+        <span class="core"></span>
+      </div>
+      <div class="sentinel-text">
+        <span class="lbl">Asesor Cognitivo</span>
+        <span class="scn" id="scn">Detectando escenario…</span>
+      </div>
+      <span class="live-chip"><span class="dot"></span>EN VIVO</span>
+    </header>
+
+    <!-- Lo que dice la otra parte -->
+    <div class="ribbon">
+      <span class="who" id="who">Agente</span>
+      <span class="said" id="said">Conectando con servicio al cliente…</span>
+    </div>
+
+    <div class="legend" aria-hidden="true">
+      <i class="l-coral">Riesgo</i>
+      <i class="l-zaf">Sugerencia</i>
+      <i class="l-amb">Pregunta</i>
+      <i class="l-men">Dato</i>
+    </div>
+
+    <!-- Stream de alertas -->
+    <section class="stream" aria-live="polite" aria-label="Alertas del asesor">
+      <div class="stream-inner" id="stream"></div>
+    </section>
+
+    <!-- Pie -->
+    <footer class="foot">
+      <span class="hint">El asesor solo observa y sugiere.<br>Tú llevas la conversación.</span>
+      <button class="replay" id="replay">↻ Repetir demo</button>
+    </footer>
+  </main>
+
+<script>
+/* ============================================================
+   Simulación de una llamada real con la compañía eléctrica.
+   (La historia de origen del producto.)
+   En producción, estos objetos llegan por WebSocket desde el
+   backend tras pasar por el clasificador de escenario + modelo.
+   ============================================================ */
+
+const guion = [
+  {
+    t: 600,
+    scn: "Negociación · Plan de energía",
+    who: "Agente",
+    said: "Veo que su plan actual es <b>el mejor que tenemos disponible</b> para usted ahora mismo.",
+    card: {
+      tipo: "sugerencia", prio: "media", icon: "💡",
+      tag: "Sugerencia",
+      body: "El plan «Saver 12» no aparece en tu cuenta, pero existe. Pídelo por su nombre exacto.",
+      quote: { lbl: "Detectado", txt: "“…el mejor que tenemos disponible…”" }
+    }
+  },
+  {
+    t: 5200,
+    who: "Agente",
+    said: "Esa promoción ya expiró, pero le puedo dar una <b>tarifa especial solo por hoy</b>.",
+    card: {
+      tipo: "alerta", prio: "alta", icon: "🚨",
+      tag: "Riesgo · presión",
+      body: "Urgencia artificial. No hay obligación de decidir durante la llamada. Puedes pedir tiempo.",
+      quote: { lbl: "Táctica detectada", txt: "“…una tarifa especial solo por hoy…”" }
+    }
+  },
+  {
+    t: 10200,
+    who: "Agente",
+    said: "Le quedaría en <b>14.9 centavos por kWh</b>. Es un precio excelente, créame.",
+    card: {
+      tipo: "calculo", prio: "media", icon: "📊",
+      tag: "Cálculo en vivo",
+      body: "Comparado con tu consumo real (1,100 kWh/mes):",
+      calc: {
+        rows: [
+          ["Oferta · 14.9¢/kWh", "$163.90/mes"],
+          ["Saver 12 · 11.2¢/kWh", "$123.20/mes"]
+        ],
+        win: ["Ahorro real", "$40.70/mes · $488/año"]
+      }
+    }
+  },
+  {
+    t: 16000,
+    who: "Agente",
+    said: "Para activarlo solo necesito que me confirme los <b>últimos 4 dígitos de su tarjeta</b>.",
+    card: {
+      tipo: "alerta", prio: "alta", icon: "🚨",
+      tag: "Riesgo · datos",
+      body: "Cambiar de plan NO requiere tu tarjeta. Pausa y verifica antes de dar cualquier dato.",
+      quote: { lbl: "Bandera roja", txt: "“…los últimos 4 dígitos de su tarjeta…”" }
+    }
+  },
+  {
+    t: 21500,
+    who: "Tú",
+    said: "Tomando el control de la conversación…",
+    card: {
+      tipo: "pregunta", prio: "media", icon: "❓",
+      tag: "Pregunta sugerida",
+      body: "«¿Me confirma por escrito el plan y la tarifa antes de cualquier cargo?»",
+      quote: { lbl: "Cierre firme", txt: "Deja constancia. Sin presión, sin prisa." }
+    }
+  }
+];
+
+const stream = document.getElementById('stream');
+const elScn = document.getElementById('scn');
+const elWho = document.getElementById('who');
+const elSaid = document.getElementById('said');
+const device = document.getElementById('device');
+const replay = document.getElementById('replay');
+let timers = [];
+
+function buildCard(c) {
+  const card = document.createElement('article');
+  card.className = `card t-${c.tipo}`;
+
+  let inner = `
+    <div class="head">
+      <span class="badge">${c.icon}</span>
+      <span class="tag">${c.tag}</span>
+      <span class="prio ${c.prio}">${c.prio.toUpperCase()}</span>
+    </div>
+    <div class="body">${c.body}</div>`;
+
+  if (c.calc) {
+    inner += `<div class="calc">`;
+    c.calc.rows.forEach(r => {
+      inner += `<div class="row"><span>${r[0]}</span><b>${r[1]}</b></div>`;
+    });
+    inner += `<div class="win"><span>${c.calc.win[0]}</span><span>${c.calc.win[1]}</span></div></div>`;
+  }
+  if (c.quote) {
+    inner += `<div class="quote"><span>${c.quote.lbl}</span>${c.quote.txt}</div>`;
+  }
+  card.innerHTML = inner;
+  return card;
+}
+
+function run() {
+  // limpiar
+  timers.forEach(clearTimeout); timers = [];
+  stream.innerHTML = '';
+  elScn.textContent = 'Detectando escenario…';
+  elWho.textContent = 'Agente';
+  elSaid.innerHTML = 'Conectando con servicio al cliente…';
+
+  guion.forEach((step) => {
+    timers.push(setTimeout(() => {
+      if (step.scn) elScn.textContent = step.scn;
+      elWho.textContent = step.who;
+      // transición suave de la cinta
+      elSaid.style.opacity = 0;
+      setTimeout(() => { elSaid.innerHTML = step.said; elSaid.style.opacity = 1; }, 180);
+
+      if (step.card) {
+        const card = buildCard(step.card);
+        stream.prepend(card);
+
+        // halo crítico
+        if (step.card.prio === 'alta') {
+          device.classList.remove('alert-flash');
+          void device.offsetWidth;
+          device.classList.add('alert-flash');
+        }
+
+        // auto-dismiss de tarjetas no críticas (conserva el historial reciente)
+        const cards = stream.querySelectorAll('.card');
+        if (cards.length > 6) {
+          const oldest = cards[cards.length - 1];
+          if (!oldest.querySelector('.prio.alta')) {
+            oldest.classList.add('leaving');
+            setTimeout(() => oldest.remove(), 480);
+          }
+        }
+      }
+    }, step.t));
+  });
+
+  // re-armar bucle suave
+  timers.push(setTimeout(() => {
+    elWho.textContent = 'Sesión';
+    elSaid.innerHTML = 'Llamada finalizada · 3 riesgos evitados · $488/año recuperados';
+  }, 26500));
+}
+
+replay.addEventListener('click', run);
+run();
+</script>
+</body>
+</html>
