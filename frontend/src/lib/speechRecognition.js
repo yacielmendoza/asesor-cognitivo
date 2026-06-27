@@ -22,8 +22,9 @@ export function createSpeechRecognizer({ lang = "es-ES", onResult, onError } = {
   };
 
   recognizer.onerror = (event) => {
-    // "no-speech" ocurre constantemente en silencio normal; no es un error real.
-    if (event.error === "no-speech") return;
+    // "no-speech" (silencio normal) y "aborted" (el motor se reinicia solo en
+    // Android Chrome durante reconocimiento continuo) son ruido esperado, no fallos reales.
+    if (event.error === "no-speech" || event.error === "aborted") return;
     onError?.(event.error);
   };
 
@@ -31,7 +32,11 @@ export function createSpeechRecognizer({ lang = "es-ES", onResult, onError } = {
     // Algunos navegadores cierran la sesión de reconocimiento tras un silencio;
     // se reinicia automáticamente mientras la captura siga activa.
     if (recognizer._shouldRestart) {
-      recognizer.start();
+      try {
+        recognizer.start();
+      } catch {
+        // Reintento ya en curso (p. ej. tras un "aborted" inmediato); se ignora.
+      }
     }
   };
 
